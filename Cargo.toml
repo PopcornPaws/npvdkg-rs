@@ -1,0 +1,9 @@
+[package]
+name = "npvdkg-rs"
+version = "0.0.0-alpha"
+edition = "2021"
+
+[dependencies]
+mcl = "0.5.0-alpha"
+serde_json = "1.0"
+sha3 = "0.10.1"
