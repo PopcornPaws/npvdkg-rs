@@ -1,20 +1,36 @@
-use mcl::bn::{Fr, G1, G2, GT};
-use mcl::common::Base;
-use mcl::traits::RawSerializable;
-use sha3::{Digest, Sha3_256};
+use bls::{G1Affine, G2Affine, Scalar, pairing};
+use ff::Field;
+use rand_core::RngCore;
 
-// NOTE: Consider the following implementatiion:
-// - PVSH is a struct with field "proof" (ESH)
-// - it has 3 methods implemented for it:
-//      - encode (returns Self)
-//      - verify (returns bool)
-//      - decode (returns Fr share)
-// - Proof is a struct with 3 fields:
-//      - c, U and V
-// - Member is a struct with public fields
-//      - id, pubkey, pubhash, share
-// TODO hash2fr should be checked and optimized
+pub struct Participant {
+    pub id: Scalar,
+    pub pubkey: G2Affine,
+}
 
+pub struct Proof {
+    pub c: Scalar,
+    pub U: G2Affine,
+    pub V: G1Affine,
+}
+
+impl Proof {
+    pub fn pvsh_encode<R: RngCore>(rng: &mut R, participant: Participant, sh: Scalar) -> Self {
+        let r = Scalar::random(rng);
+        //let mut hasher = Sha3_256::new();
+        //hasher
+        //    .chain_update(participant.id.to_bytes())
+        //    .chain_update(participant.pubkey.to_bytes());
+        //let mut hash = [u8; 32];
+        //hasher.finalize_into(&mut hash);
+        //let Q = G1Affine::from_bytes(hash);
+
+        //let e = pairing(Q, r * participant.pubkey);
+        //let eh = 
+        todo!();
+    }
+}
+
+/*
 #[allow(non_snake_case)]
 pub fn pvsh_encode(id: &Fr, pubkey: &G2, share: &Fr, g2: &G2) -> String {
     // select random point in Fr
@@ -115,26 +131,27 @@ pub fn pvsh_decode(id: &Fr, pubkey: &G2, sk: &Fr, proof: &str) -> Fr {
 
     c - eh
 }
+*/
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    use mcl::init;
-
-    #[test]
-    fn pvsh_verify_and_decode() {
-        init::init_curve(init::Curve::Bls12_381);
-        let g2 = G2::hash_and_map(b"test generator").unwrap();
-        let id = Fr::from_csprng();
-        let sk = Fr::from_csprng();
-        let pk = &g2 * sk;
-        let sh = Fr::from_csprng();
-        let ph = &g2 * sh;
-        let proof = pvsh_encode(&id, &pk, &sh, &g2);
-        let result = pvsh_verify(&id, &pk, &ph, &proof, &g2);
-        let share = pvsh_decode(&id, &pk, &sk, &proof);
-
-        assert!(result);
-        assert_eq!(share, sh);
-    }
-}
+//#[cfg(test)]
+//mod test {
+//    use super::*;
+//    use mcl::init;
+//
+//    #[test]
+//    fn pvsh_verify_and_decode() {
+//        init::init_curve(init::Curve::Bls12_381);
+//        let g2 = G2::hash_and_map(b"test generator").unwrap();
+//        let id = Fr::from_csprng();
+//        let sk = Fr::from_csprng();
+//        let pk = &g2 * sk;
+//        let sh = Fr::from_csprng();
+//        let ph = &g2 * sh;
+//        let proof = pvsh_encode(&id, &pk, &sh, &g2);
+//        let result = pvsh_verify(&id, &pk, &ph, &proof, &g2);
+//        let share = pvsh_decode(&id, &pk, &sk, &proof);
+//
+//        assert!(result);
+//        assert_eq!(share, sh);
+//    }
+//}
