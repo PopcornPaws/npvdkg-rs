@@ -9,3 +9,6 @@ ff = "0.11"
 generic-array = "0.14"
 rand_core = "0.6.0"
 sha3 = "0.9"
+
+[dev-dependencies]
+rand_xorshift = "0.3.0"

@@ -1,4 +1,5 @@
-use bls::{G1Affine, G2Affine, Scalar, pairing};
+use crate::{hash_to_fp, hash_to_g1, FP_BYTES, G2_BYTES};
+use bls::{pairing, G1Affine, G2Affine, Scalar};
 use ff::Field;
 use rand_core::RngCore;
 
@@ -7,151 +8,122 @@ pub struct Participant {
     pub pubkey: G2Affine,
 }
 
-pub struct Proof {
+impl Participant {
+    pub fn to_bytes(&self) -> [u8; FP_BYTES + G2_BYTES] {
+        let mut output = [0u8; FP_BYTES + G2_BYTES];
+        output[0..FP_BYTES].copy_from_slice(&self.id.to_bytes());
+        output[FP_BYTES..].copy_from_slice(&self.pubkey.to_compressed());
+        output
+    }
+}
+
+pub struct PvshProof {
     pub c: Scalar,
     pub U: G2Affine,
     pub V: G1Affine,
 }
 
-impl Proof {
-    pub fn pvsh_encode<R: RngCore>(rng: &mut R, participant: Participant, sh: Scalar) -> Self {
+impl PvshProof {
+    pub fn encode<R: RngCore>(
+        rng: &mut R,
+        participant: &Participant,
+        secret_share: Scalar,
+    ) -> Self {
         let r = Scalar::random(rng);
-        //let mut hasher = Sha3_256::new();
-        //hasher
-        //    .chain_update(participant.id.to_bytes())
-        //    .chain_update(participant.pubkey.to_bytes());
-        //let mut hash = [u8; 32];
-        //hasher.finalize_into(&mut hash);
-        //let Q = G1Affine::from_bytes(hash);
+        let Q = hash_to_g1(&participant.to_bytes());
 
-        //let e = pairing(Q, r * participant.pubkey);
-        //let eh = 
-        todo!();
+        let e = pairing(&Q, &G2Affine::from(participant.pubkey * r));
+        let eh = hash_to_fp(e.to_string().as_bytes());
+
+        let c = secret_share + eh;
+        let U = G2Affine::from(G2Affine::generator() * r);
+        let H = hash_to_g1(
+            format!(
+                "{:?}.{:?}.{:?}",
+                Q.to_compressed(),
+                c.to_bytes(),
+                U.to_compressed()
+            )
+            .as_bytes(),
+        );
+
+        let V = G1Affine::from(H * (eh * r.invert().unwrap()));
+
+        Self { c, U, V }
+    }
+
+    pub fn verify(&self, participant: &Participant, public_share: &G2Affine) -> bool {
+        let Q = hash_to_g1(&participant.to_bytes());
+        let H = hash_to_g1(
+            format!(
+                "{:?}.{:?}.{:?}",
+                Q.to_compressed(),
+                self.c.to_bytes(),
+                self.U.to_compressed()
+            )
+            .as_bytes(),
+        );
+
+        let g2c = G2Affine::from(G2Affine::generator() * self.c);
+        let e1 = pairing(&H, &g2c);
+
+        let share_pairing = pairing(&H, public_share);
+        let verification_pairing = pairing(&self.V, &self.U);
+        // NOTE in the bls crate, multiplication is implemented as addition
+        // NOTE but under the hood gt1 + gt2 looks like gt1.0 * gt2.0
+        let e2 = share_pairing + verification_pairing;
+
+        e1 == e2
+    }
+
+    pub fn decode(&self, participant: &Participant, secret_key: &Scalar) -> Scalar {
+        let Q = hash_to_g1(&participant.to_bytes());
+        let e = pairing(&G1Affine::from(Q * secret_key), &self.U);
+        let eh = hash_to_fp(e.to_string().as_bytes());
+
+        self.c - eh
     }
 }
 
-/*
-#[allow(non_snake_case)]
-pub fn pvsh_encode(id: &Fr, pubkey: &G2, share: &Fr, g2: &G2) -> String {
-    // select random point in Fr
-    let mut r = Fr::from_csprng();
+#[cfg(test)]
+mod test {
+    use super::*;
+    use rand_core::SeedableRng;
+    use rand_xorshift::XorShiftRng;
 
-    // compute "Q" value
-    let mut q_preimage = id.serialize_raw().unwrap();
-    q_preimage.append(&mut pubkey.serialize_raw().unwrap());
-    let mut Q = G1::hash_and_map(&q_preimage).unwrap();
+    const SEED: [u8; 16] = [0; 16];
 
-    // compute "eh" from the pairing
-    let pubkey_r = pubkey * r;
-    let eh_preimage = GT::from_pairing(&Q, &pubkey_r);
-    let mut hasher = Sha3_256::new();
-    hasher.update(&eh_preimage.serialize_raw().unwrap());
-    let hash = &hasher.finalize()[..];
-    let hash_str = std::str::from_utf8(hash).unwrap();
-    let eh = Fr::from_str(hash_str, Base::Hex);
+    #[test]
+    fn pvsh_verify_and_decode() {
+        let mut rng = XorShiftRng::from_seed(SEED);
 
-    // compute ciphertext "c"
-    let mut c = share + eh;
+        let g2 = G2Affine::generator();
+        let secret_key = Scalar::random(&mut rng);
+        let participant = Participant {
+            id: Scalar::random(&mut rng),
+            pubkey: G2Affine::from(g2 * secret_key),
+        };
 
-    // compute "U" value
-    let mut U = g2 * r;
+        let secret_share = Scalar::random(&mut rng);
+        let public_share = G2Affine::from(g2 * secret_share);
 
-    // variables as serialized strings
-    let c_string = serde_json::to_string(&c).unwrap();
-    let U_string = serde_json::to_string(&U).unwrap();
-    let Q_string = serde_json::to_string(&Q).unwrap();
-    // compute "H" value
-    let h_preimage = format!("{}.{}.{}", &Q_string, &c_string, &U_string);
-    let mut hasher = Sha3_256::new();
-    hasher.update(h_preimage.as_bytes());
-    let hash = &hasher.finalize()[..];
-    let H = G1::hash_and_map(hash).unwrap();
+        // clone secret share to validate it later (don't wanna use a reference here)
+        let proof = PvshProof::encode(&mut rng, &participant, secret_share.clone());
+        let result = proof.verify(&participant, &public_share);
+        let decoded_share = proof.decode(&participant, &secret_key);
 
-    // compute verification vector "V"
-    let quotient = eh / r;
-    let mut V = &H * quotient;
+        assert!(result);
+        assert_eq!(secret_share, decoded_share);
+    }
 
-    // compute resulting proof
-    let V_string = serde_json::to_string(&V).unwrap();
-    let proof = format!("{}.{}.{}", &c_string, &U_string, &V_string);
+    #[test]
+    fn arithmetics() {
+        let mut rng = XorShiftRng::from_seed(SEED);
+        let a = Scalar::random(&mut rng);
+        let b = Scalar::random(&mut rng);
 
-    r.clear();
-    Q.clear();
-    c.clear();
-    U.clear();
-    V.clear();
-
-    proof
+        let c = a * b;
+        let a_prime = c * b.invert().unwrap();
+        assert_eq!(a, a_prime);
+    }
 }
-
-#[allow(non_snake_case)]
-pub fn pvsh_verify(id: &Fr, pubkey: &G2, PH: &G2, proof: &str, g2: &G2) -> bool {
-    let esh_array: Vec<&str> = proof.split('.').collect();
-    assert!(esh_array.len() == 3, "invalid proof provided");
-    // parse proof components
-    let c = Fr::from_str(esh_array[0], Base::Hex);
-    let U = G2::from_str(esh_array[1], Base::Hex);
-    let V = G1::from_str(esh_array[2], Base::Hex);
-    // compute "Q" value (TODO: should be an input parameter)
-    let mut q_preimage = id.serialize_raw().unwrap();
-    q_preimage.append(&mut pubkey.serialize_raw().unwrap());
-    let Q = G1::hash_and_map(&q_preimage).unwrap();
-    // compute "H" value
-    let Q_string = serde_json::to_string(&Q).unwrap();
-    let H = G1::hash_and_map(format!("{}.{}.{}", &Q_string, esh_array[0], esh_array[1]).as_bytes())
-        .unwrap();
-    // compute and verify pairings
-    let g2c = g2 * c;
-    let pairing_1 = GT::from_pairing(&H, &g2c);
-    let pairing_2 = GT::from_pairing(&H, &PH);
-    let pairing_3 = GT::from_pairing(&V, &U);
-
-    let expected = &pairing_2 * pairing_3;
-
-    pairing_1 == expected
-}
-
-#[allow(non_snake_case)]
-pub fn pvsh_decode(id: &Fr, pubkey: &G2, sk: &Fr, proof: &str) -> Fr {
-    let esh_array: Vec<&str> = proof.split('.').collect();
-    assert!(esh_array.len() == 3, "invalid proof provided");
-    let c = Fr::from_str(esh_array[0], Base::Hex);
-    let U = G2::from_str(esh_array[1], Base::Hex);
-    // compute "Q" value
-    let mut q_preimage = id.serialize_raw().unwrap();
-    q_preimage.append(&mut pubkey.serialize_raw().unwrap());
-    let Q = G1::hash_and_map(&q_preimage).unwrap();
-    // decode "eh"
-    let pairing = GT::from_pairing(&(&Q * sk), &U);
-    let mut hasher = Sha3_256::new();
-    hasher.update(&pairing.serialize_raw().unwrap());
-    let hash = &hasher.finalize()[..];
-    let hash_str = std::str::from_utf8(hash).unwrap();
-    let eh = Fr::from_str(hash_str, Base::Hex);
-
-    c - eh
-}
-*/
-
-//#[cfg(test)]
-//mod test {
-//    use super::*;
-//    use mcl::init;
-//
-//    #[test]
-//    fn pvsh_verify_and_decode() {
-//        init::init_curve(init::Curve::Bls12_381);
-//        let g2 = G2::hash_and_map(b"test generator").unwrap();
-//        let id = Fr::from_csprng();
-//        let sk = Fr::from_csprng();
-//        let pk = &g2 * sk;
-//        let sh = Fr::from_csprng();
-//        let ph = &g2 * sh;
-//        let proof = pvsh_encode(&id, &pk, &sh, &g2);
-//        let result = pvsh_verify(&id, &pk, &ph, &proof, &g2);
-//        let share = pvsh_decode(&id, &pk, &sk, &proof);
-//
-//        assert!(result);
-//        assert_eq!(share, sh);
-//    }
-//}
