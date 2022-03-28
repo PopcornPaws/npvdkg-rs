@@ -16,7 +16,7 @@ use sha3::{Digest, Sha3_256};
 // TODO hash2fr should be checked and optimized
 
 #[allow(non_snake_case)]
-pub fn pvsh_encode(id: Fr, pubkey: G2, share: Fr, g2: G2) -> String {
+pub fn pvsh_encode(id: &Fr, pubkey: &G2, share: &Fr, g2: &G2) -> String {
     // select random point in Fr
     let mut r = Fr::from_csprng();
 
@@ -26,7 +26,7 @@ pub fn pvsh_encode(id: Fr, pubkey: G2, share: Fr, g2: G2) -> String {
     let mut Q = G1::hash_and_map(&q_preimage).unwrap();
 
     // compute "eh" from the pairing
-    let pubkey_r = &pubkey * r;
+    let pubkey_r = pubkey * r;
     let eh_preimage = GT::from_pairing(&Q, &pubkey_r);
     let mut hasher = Sha3_256::new();
     hasher.update(&eh_preimage.serialize_raw().unwrap());
@@ -38,7 +38,7 @@ pub fn pvsh_encode(id: Fr, pubkey: G2, share: Fr, g2: G2) -> String {
     let mut c = share + eh;
 
     // compute "U" value
-    let mut U = &g2 * r;
+    let mut U = g2 * r;
 
     // variables as serialized strings
     let c_string = serde_json::to_string(&c).unwrap();
@@ -69,7 +69,7 @@ pub fn pvsh_encode(id: Fr, pubkey: G2, share: Fr, g2: G2) -> String {
 }
 
 #[allow(non_snake_case)]
-pub fn pvsh_verifiy(id: Fr, pubkey: G2, PH: G2, proof: &str, g2: G2) -> bool {
+pub fn pvsh_verify(id: &Fr, pubkey: &G2, PH: &G2, proof: &str, g2: &G2) -> bool {
     let esh_array: Vec<&str> = proof.split('.').collect();
     assert!(esh_array.len() == 3, "invalid proof provided");
     // parse proof components
@@ -85,7 +85,7 @@ pub fn pvsh_verifiy(id: Fr, pubkey: G2, PH: G2, proof: &str, g2: G2) -> bool {
     let H = G1::hash_and_map(format!("{}.{}.{}", &Q_string, esh_array[0], esh_array[1]).as_bytes())
         .unwrap();
     // compute and verify pairings
-    let g2c = &g2 * c;
+    let g2c = g2 * c;
     let pairing_1 = GT::from_pairing(&H, &g2c);
     let pairing_2 = GT::from_pairing(&H, &PH);
     let pairing_3 = GT::from_pairing(&V, &U);
@@ -96,7 +96,7 @@ pub fn pvsh_verifiy(id: Fr, pubkey: G2, PH: G2, proof: &str, g2: G2) -> bool {
 }
 
 #[allow(non_snake_case)]
-pub fn pvsh_decode(id: Fr, pubkey: G2, sk: Fr, proof: &str) -> Fr {
+pub fn pvsh_decode(id: &Fr, pubkey: &G2, sk: &Fr, proof: &str) -> Fr {
     let esh_array: Vec<&str> = proof.split('.').collect();
     assert!(esh_array.len() == 3, "invalid proof provided");
     let c = Fr::from_str(esh_array[0], Base::Hex);
@@ -114,4 +114,27 @@ pub fn pvsh_decode(id: Fr, pubkey: G2, sk: Fr, proof: &str) -> Fr {
     let eh = Fr::from_str(hash_str, Base::Hex);
 
     c - eh
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use mcl::init;
+
+    #[test]
+    fn pvsh_verify_and_decode() {
+        init::init_curve(init::Curve::Bls12_381);
+        let g2 = G2::hash_and_map(b"test generator").unwrap();
+        let id = Fr::from_csprng();
+        let sk = Fr::from_csprng();
+        let pk = &g2 * sk;
+        let sh = Fr::from_csprng();
+        let ph = &g2 * sh;
+        let proof = pvsh_encode(&id, &pk, &sh, &g2);
+        let result = pvsh_verify(&id, &pk, &ph, &proof, &g2);
+        let share = pvsh_decode(&id, &pk, &sk, &proof);
+
+        assert!(result);
+        assert_eq!(share, sh);
+    }
 }
