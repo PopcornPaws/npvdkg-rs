@@ -1,21 +1,7 @@
-use crate::{hash_to_fp, hash_to_g1, FP_BYTES, G2_BYTES};
+use crate::*;
 use bls::{pairing, G1Affine, G2Affine, Scalar};
 use ff::Field;
 use rand_core::RngCore;
-
-pub struct Participant {
-    pub id: Scalar,
-    pub pubkey: G2Affine,
-}
-
-impl Participant {
-    pub fn to_bytes(&self) -> [u8; FP_BYTES + G2_BYTES] {
-        let mut output = [0u8; FP_BYTES + G2_BYTES];
-        output[0..FP_BYTES].copy_from_slice(&self.id.to_bytes());
-        output[FP_BYTES..].copy_from_slice(&self.pubkey.to_compressed());
-        output
-    }
-}
 
 pub struct PvshProof {
     pub c: Scalar,
@@ -104,18 +90,17 @@ mod test {
             pubkey: G2Affine::from(g2 * secret_key),
         };
 
-        let secret_share = Scalar::random(&mut rng);
-        let public_share = G2Affine::from(g2 * secret_share);
+        let share = Share::random(&mut rng);
 
-        let proof = PvshProof::encode(&mut rng, &participant, &secret_share);
-        let pass = proof.verify(&participant, &public_share);
+        let proof = PvshProof::encode(&mut rng, &participant, &share.secret);
+        let pass = proof.verify(&participant, &share.public);
         let decoded_share = proof.decode(&participant, &secret_key);
 
         assert!(pass);
-        assert_eq!(secret_share, decoded_share);
+        assert_eq!(share.secret, decoded_share);
 
         let invalid_decoded_share = proof.decode(&participant, &Scalar::random(&mut rng));
-        assert_ne!(secret_share, invalid_decoded_share);
+        assert_ne!(share.secret, invalid_decoded_share);
 
         let invalid_secret_share = Scalar::random(&mut rng);
         let invalid_public_share = G2Affine::from(g2 * invalid_secret_share);

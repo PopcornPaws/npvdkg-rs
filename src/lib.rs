@@ -1,5 +1,9 @@
 #![allow(non_snake_case)]
+pub mod npvdkgrs;
 pub mod pvsh;
+mod types;
+
+pub use types::*;
 
 use bls::hash_to_curve::{ExpandMsgXmd, HashToCurve, HashToField};
 use bls::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
@@ -13,6 +17,9 @@ const G2_BYTES: usize = 96; // compressed
 // NOTE check domain separation tags
 const G1_DST: &[u8] = b"ThIs2Is A8rAnDoM DoMaIn SePaRaTiOn+TaG fOr G1";
 const G2_DST: &[u8] = b"ThIs#Is_A rAnDoM!DoMaIn SePaRaTiOn9TaG fOr G2";
+
+pub type PublicKey = G2Affine;
+pub type SecretKey = Scalar;
 
 pub fn hash_to_g1(msg: &[u8]) -> G1Affine {
     let g1 = <G1Projective as HashToCurve<ExpandMsgXmd<Sha3_256>>>::hash_to_curve(msg, G1_DST);
