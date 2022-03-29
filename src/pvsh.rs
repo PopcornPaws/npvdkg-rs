@@ -27,7 +27,7 @@ impl PvshProof {
     pub fn encode<R: RngCore>(
         rng: &mut R,
         participant: &Participant,
-        secret_share: Scalar,
+        secret_share: &Scalar,
     ) -> Self {
         let r = Scalar::random(rng);
         let Q = hash_to_g1(&participant.to_bytes());
@@ -107,13 +107,20 @@ mod test {
         let secret_share = Scalar::random(&mut rng);
         let public_share = G2Affine::from(g2 * secret_share);
 
-        // clone secret share to validate it later (don't wanna use a reference here)
-        let proof = PvshProof::encode(&mut rng, &participant, secret_share.clone());
-        let result = proof.verify(&participant, &public_share);
+        let proof = PvshProof::encode(&mut rng, &participant, &secret_share);
+        let pass = proof.verify(&participant, &public_share);
         let decoded_share = proof.decode(&participant, &secret_key);
 
-        assert!(result);
+        assert!(pass);
         assert_eq!(secret_share, decoded_share);
+
+        let invalid_decoded_share = proof.decode(&participant, &Scalar::random(&mut rng));
+        assert_ne!(secret_share, invalid_decoded_share);
+
+        let invalid_secret_share = Scalar::random(&mut rng);
+        let invalid_public_share = G2Affine::from(g2 * invalid_secret_share);
+        let fail = proof.verify(&participant, &invalid_public_share);
+        assert!(!fail);
     }
 
     #[test]
