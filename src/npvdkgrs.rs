@@ -1,5 +1,5 @@
-use crate::{Participant, CalculatedShare, Share};
 use crate::pvsh::PvshProof;
+use crate::{CalculatedShare, Participant, Share};
 
 use bls::G2Affine;
 use rand_core::RngCore;
