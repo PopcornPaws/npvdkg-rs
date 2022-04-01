@@ -1,3 +1,4 @@
+use crate::polynomial::Polynomial;
 use crate::pvsh::PvshProof;
 use crate::{CalculatedShare, Participant, Share};
 
@@ -21,6 +22,13 @@ impl<const N: usize, const T: usize> Npvdkgrs<N, T> {
         old_share: Option<Share>,
     ) -> Vec<Contribution> {
         let _ = Self::SIZE_CHECK;
+
+        let mut shares = [Share::random(rng); T];
+        if let Some(share) = old_share {
+            shares[0] = share;
+        }
+
+        let mut poly_coeffs = [Scalar::zero(); T];
         todo!();
     }
 }
