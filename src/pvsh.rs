@@ -1,4 +1,5 @@
-use crate::*;
+use crate::hash_to_curve::*;
+use crate::participant::*;
 use bls::{pairing, G1Affine, G2Affine, Scalar};
 use ff::Field;
 use rand_core::RngCore;
@@ -74,6 +75,7 @@ impl PvshProof {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::share::Share;
     use rand_core::SeedableRng;
     use rand_xorshift::XorShiftRng;
 

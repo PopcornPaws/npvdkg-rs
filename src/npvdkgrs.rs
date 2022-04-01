@@ -1,8 +1,9 @@
-use crate::polynomial::Polynomial;
+use crate::participant::*;
+use crate::polynomial::evaluate;
 use crate::pvsh::PvshProof;
-use crate::{CalculatedShare, Participant, Share};
+use crate::share::*;
 
-use bls::G2Affine;
+use bls::{G2Affine, Scalar};
 use rand_core::RngCore;
 
 pub struct Contribution {
@@ -17,19 +18,32 @@ impl<const N: usize, const T: usize> Npvdkgrs<N, T> {
 
     pub fn contributions<R: RngCore>(
         rng: &mut R,
-        participants: Vec<Participant>,
+        participants: [Participant; N],
         me: Participant,
         old_share: Option<Share>,
     ) -> Vec<Contribution> {
         let _ = Self::SIZE_CHECK;
 
-        let mut shares = [Share::random(rng); T];
+        let mut shares = ShareN::<T>::random(rng);
         if let Some(share) = old_share {
-            shares[0] = share;
+            shares.update(0, share);
         }
 
-        let mut poly_coeffs = [Scalar::zero(); T];
-        todo!();
+        // NOTE MaybeUninit might be used to initialize a fixed
+        // [Contribution; N] array element by element
+        let mut contributions = Vec::with_capacity(N);
+
+        for (i, participant) in participants.into_iter().enumerate() {
+            // TODO evaluate polynomial
+            let secret_share = evaluate(&shares.secret, participant.id);
+            let proof = PvshProof::encode(rng, &participant, &secret_share);
+            contributions.push(Contribution {
+                participant,
+                proof,
+                public_share: shares.public[i],
+            });
+        }
+        contributions
     }
 }
 
@@ -44,9 +58,6 @@ impl<const N: usize, const T: usize> Npvdkgrs<N, T> {
 //        shares.push(Share::random(rng));
 //    }
 //
-//    for participant in participants.into_iter() {
-//        // TODO lagrange interpolation
-//    }
 //
 //    //let mut contribution = Contribution {
 //    //    contributor: me,
