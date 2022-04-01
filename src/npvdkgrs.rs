@@ -20,8 +20,8 @@ impl<const N: usize, const T: usize> Npvdkgrs<N, T> {
         me: Participant,
         old_share: Option<Share>,
     ) -> Vec<Contribution> {
-        let _ = Self::SIZE_CHECK;
-        todo!();
+        let _ = SIZE_CHECK; // this is checked at compile time
+        assert_eq!(Self::N, participants.len(), "invalid participants vec")
     }
 }
 
