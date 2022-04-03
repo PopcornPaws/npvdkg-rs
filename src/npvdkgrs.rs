@@ -6,6 +6,8 @@ use crate::share::*;
 use bls::{G2Affine, Scalar};
 use rand_core::RngCore;
 
+use std::mem::{self, MaybeUninit};
+
 pub struct Contribution {
     pub participant: Participant,
     pub proof: PvshProof,
@@ -21,7 +23,7 @@ impl<const N: usize, const T: usize> Npvdkgrs<N, T> {
         participants: [Participant; N],
         me: Participant,
         old_share: Option<Share>,
-    ) -> Vec<Contribution> {
+    ) -> [Contribution; N] {
         let _ = Self::SIZE_CHECK;
 
         let mut shares = ShareN::<T>::random(rng);
@@ -31,18 +33,19 @@ impl<const N: usize, const T: usize> Npvdkgrs<N, T> {
 
         // NOTE MaybeUninit might be used to initialize a fixed
         // [Contribution; N] array element by element
-        let mut contributions = Vec::with_capacity(N);
+        let mut contributions: [Contribution; N] = unsafe { MaybeUninit::uninit().assume_init() };
 
-        for (i, participant) in participants.into_iter().enumerate() {
+        for (participant, contribution) in &participants.zip(contributions){
             // TODO evaluate polynomial
             let secret_share = evaluate(&shares.secret, participant.id);
             let proof = PvshProof::encode(rng, &participant, &secret_share);
-            contributions.push(Contribution {
+            contribution.write(Contribution {
                 participant,
                 proof,
-                public_share: shares.public[i],
+                public_share: todo!(), // is this a vector?
             });
         }
+        unsafe { mem::transmute::<_, [Contribution; N]>(contribution) }
         contributions
     }
 }
