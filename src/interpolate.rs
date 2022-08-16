@@ -43,6 +43,7 @@ pub fn interpolate(x: &[Scalar], y: &[Scalar]) -> Result<Vec<Scalar>, String> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::ops::Neg;
 
     //fn eval_poly<C: Curve>(coeffs: &[Scalar<C>], x: Scalar<C>) -> Scalar<C> {
     //    let mut ret = Scalar::ZERO;
@@ -65,7 +66,7 @@ mod test {
         let coeffs = interpolate(&x, &y).unwrap();
         assert_eq!(coeffs[0], Scalar::from(53_u64));
 
-        // simple constant polynomial (y = x)
+        // simple first order polynomial (y = x)
         let x = vec![
             Scalar::from(1_u64),
             Scalar::from(2_u64),
@@ -78,12 +79,12 @@ mod test {
         assert_eq!(coeffs[1], Scalar::one()); // c_1
         assert_eq!(coeffs[2], Scalar::zero()); // c_2
 
-        // first order polynomial (y = 22 * x + 7)
+        // first order polynomial (y = 32 * x - 13)
         let x = vec![Scalar::from(2_u64), Scalar::from(3_u64)];
-        let y = vec![Scalar::from(51_u64), Scalar::from(73_u64)];
+        let y = vec![Scalar::from(51_u64), Scalar::from(83_u64)];
         let coeffs = interpolate(&x, &y).unwrap();
-        assert_eq!(coeffs[0], Scalar::from(7_u64));
-        assert_eq!(coeffs[1], Scalar::from(22_u64));
+        assert_eq!(coeffs[0], Scalar::from(13_u64).neg());
+        assert_eq!(coeffs[1], Scalar::from(32_u64));
 
         // fourth order polynomial
         // y = x^4 + 0 * x^3 + 3 * x^2 + 2 * x + 14
