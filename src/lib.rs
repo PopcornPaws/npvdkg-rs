@@ -1,9 +1,7 @@
 #![allow(non_snake_case)]
-#![allow(incomplete_features)]
-#![feature(generic_const_exprs)]
 
+mod interpolate;
 pub mod npvdkgrs;
-mod polynomial;
 pub mod pvsh;
 mod types;
 
